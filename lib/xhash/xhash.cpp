@@ -10,8 +10,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <cstdio>
-
 namespace xhash
 {
 // Internal constants:
@@ -29,6 +27,7 @@ static_assert(sizeof(hash512) == XHASH_LIGHT_CACHE_ITEM_SIZE, "");
 static_assert(sizeof(hash1024) == XHASH_FULL_DATASET_ITEM_SIZE, "");
 static_assert(light_cache_item_size == XHASH_LIGHT_CACHE_ITEM_SIZE, "");
 static_assert(full_dataset_item_size == XHASH_FULL_DATASET_ITEM_SIZE, "");
+
 
 namespace
 {
@@ -249,9 +248,6 @@ inline hash256 hash_kernel(
 
     hash1024 mix{{le::uint32s(seed), le::uint32s(seed)}};
 
-    // Mix starts with seed replicated
-    hash1024 mix_dbg{{le::uint32s(seed), le::uint32s(seed)}};
-
     for (uint32_t i = 0; i < num_dataset_accesses; ++i)
     {
         const uint32_t p = fnv1(i ^ seed_init, mix.word32s[i % num_words]) % index_limit;
@@ -270,7 +266,7 @@ inline hash256 hash_kernel(
         mix_hash.word32s[i / 4] = h3;
     }
 
-    return mix_hash;
+    return le::uint32s(mix_hash);
 }
 }  // namespace
 
@@ -295,11 +291,8 @@ search_result search_light(const epoch_context& context, const hash256& header_h
     for (uint64_t nonce = start_nonce; nonce < end_nonce; ++nonce)
     {
         result r = hash(context, header_hash, nonce);
-
         if (less_equal(r.final_hash, boundary))
-        {
             return {r, nonce};
-        }
     }
     return {};
 }
@@ -311,13 +304,8 @@ search_result search(const epoch_context_full& context, const hash256& header_ha
     for (uint64_t nonce = start_nonce; nonce < end_nonce; ++nonce)
     {
         result r = hash(context, header_hash, nonce);
-
-        const hash512 seed_dbg = hash_seed(header_hash, nonce);
-
         if (less_equal(r.final_hash, boundary))
-        {
             return {r, nonce};
-        }
     }
     return {};
 }
@@ -408,17 +396,12 @@ struct uint128
         p[j + 4] = k;  // Always init p[].
     }
 
-    // Check if p <= 2^256.
-    // In most cases the p < 2^256 (i.e. top 4 words are zero) should be enough.
-    const auto high_zero = (p[7] | p[6] | p[5] | p[4]) == 0;
-    return high_zero;
-    // if (high_zero)
-    //     return true;
-    //
-    // // Lastly, check p == 2^256.
-    // const auto low_zero = (p[3] | p[2] | p[1] | p[0]) == 0;
-    // const auto high_one = (((p[7] | p[6] | p[5]) == 0) & (p[4] == 1)) != 0;
-    // return low_zero && high_one;
+    // XHash boundary semantics: a solution is valid iff
+    // final_hash * difficulty <= 2^256 - 1, matching the consensus target
+    // floor((2^256 - 1) / difficulty) in the Parallax client (kernel/xhash).
+    // Note this differs from upstream ethash, which also accepts the exact
+    // p == 2^256 case (its target is 2^256 / difficulty).
+    return (p[7] | p[6] | p[5] | p[4]) == 0;
 }
 }  // namespace xhash
 
