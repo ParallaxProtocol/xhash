@@ -52,6 +52,40 @@ xhash_difficulty_to_boundary(const xhash_hash256* difficulty) noexcept
             {0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff}};
     }
 
+    // XHash boundary semantics: boundary = floor((2^256 - 1) / difficulty),
+    // matching the consensus target in the Parallax client (kernel/xhash).
+    // This equals floor(2^256 / difficulty) unless the difficulty is a power
+    // of two (the only divisors of 2^256); handle that case directly as
+    // (2^256 - 1) >> log2(difficulty) and let the long division below cover
+    // the rest.
+    {
+        int nonzero_word = -1;
+        bool single_bit = true;
+        for (size_t i = 0; i < num_words; ++i)
+        {
+            if (d[i] != 0)
+            {
+                if (nonzero_word >= 0 || (d[i] & (d[i] - 1)) != 0)
+                {
+                    single_bit = false;
+                    break;
+                }
+                nonzero_word = static_cast<int>(i);
+            }
+        }
+        if (single_bit && nonzero_word >= 0)
+        {
+            int bit = 0;
+            while ((d[nonzero_word] & (uint32_t{1} << bit)) == 0)
+                ++bit;
+            const int log2_d = nonzero_word * 32 + bit;  // difficulty = 2^log2_d, log2_d >= 1
+            xhash_hash256 boundary = {};
+            for (int i = 0; i < 256 - log2_d; ++i)
+                boundary.bytes[31 - i / 8] |= static_cast<uint8_t>(1u << (i % 8));
+            return boundary;
+        }
+    }
+
     // Normalize d.
     uint32_t dn[num_words];
     const int shift = clz(d[n - 1]);
