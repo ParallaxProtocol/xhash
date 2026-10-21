@@ -11,7 +11,7 @@ if(NOT WIN32)
 endif()
 
 HunterGate(
-    URL "https://github.com/cpp-pm/hunter/archive/v0.25.7.tar.gz"
-    SHA1 "99f05ff154c682f7349546d66294d2f69f7193bc"
+    URL "https://github.com/cpp-pm/hunter/archive/v0.26.6.tar.gz"
+    SHA1 "e70c29f878f5d5f5cdf1b9ccd628fb872e8624a8"
     LOCAL
 )
